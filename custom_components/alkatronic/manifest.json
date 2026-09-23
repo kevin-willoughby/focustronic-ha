@@ -1,0 +1,12 @@
+{
+  "domain": "alkatronic",
+  "name": "Alkatronic",
+  "version": "0.1.0",
+  "codeowners": ["@kevin"],
+  "config_flow": true,
+  "documentation": "https://github.com/yourname/alkatronic-ha",
+  "integration_type": "device",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/yourname/alkatronic-ha/issues",
+  "requirements": []
+}

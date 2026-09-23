@@ -1,0 +1,27 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Alkatronic",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "select_device": {
+        "title": "Choose your Alkatronic device",
+        "data": {
+          "device_id": "Device"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password",
+      "cannot_connect": "Could not reach Alkatronic's servers",
+      "no_devices": "No Alkatronic device found on this account"
+    },
+    "abort": {
+      "already_configured": "This device is already configured"
+    }
+  }
+}
