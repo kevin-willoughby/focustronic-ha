@@ -35,7 +35,9 @@ class AlkatronicConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._password: str | None = None
         self._client: AlkatronicClient | None = None
         self._alkatronic_devices: list[dict[str, Any]] = []
+        self._dosetronic_devices: list[dict[str, Any]] = []
         self._dosetronic_id: str | None = None
+        self._chosen_alkatronic: dict[str, Any] | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -65,14 +67,14 @@ class AlkatronicConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._password = user_input[CONF_PASSWORD]
                     self._client = client
                     self._alkatronic_devices = alkatronic_devices
-                    # Dosetronic is optional — grab the first one if present,
-                    # purely so we can also expose its pump sensors.
-                    dosetronic_devices = devices_by_type.get("dosetronic", [])
-                    if dosetronic_devices:
-                        self._dosetronic_id = str(dosetronic_devices[0]["id"])
+                    # Dosetronic is optional — linking one lets us also expose
+                    # its pump sensors on this entry.
+                    self._dosetronic_devices = devices_by_type.get("dosetronic", [])
 
                     if len(alkatronic_devices) == 1:
-                        return await self._async_create(alkatronic_devices[0])
+                        return await self._async_alkatronic_chosen(
+                            alkatronic_devices[0]
+                        )
                     return await self.async_step_select_device()
 
         return self.async_show_form(
@@ -93,7 +95,7 @@ class AlkatronicConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             device = next(
                 d for d in self._alkatronic_devices if str(d["id"]) == chosen_id
             )
-            return await self._async_create(device)
+            return await self._async_alkatronic_chosen(device)
 
         schema = vol.Schema(
             {
@@ -108,6 +110,52 @@ class AlkatronicConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(step_id="select_device", data_schema=schema)
+
+    async def _async_alkatronic_chosen(
+        self, device: dict[str, Any]
+    ) -> config_entries.ConfigFlowResult:
+        """Called once the Alkatronic device for this entry is settled."""
+        self._chosen_alkatronic = device
+
+        if not self._dosetronic_devices:
+            return await self._async_create(device)
+        if len(self._dosetronic_devices) == 1:
+            self._dosetronic_id = str(self._dosetronic_devices[0]["id"])
+            return await self._async_create(device)
+        return await self.async_step_select_dosetronic()
+
+    async def async_step_select_dosetronic(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Only reached if the account has more than one Dosetronic device."""
+        options = {
+            str(device["id"]): device.get("friendly_name") or device["serial_number"]
+            for device in self._dosetronic_devices
+        }
+        none_value = "__none__"
+
+        if user_input is not None:
+            chosen_id = user_input[CONF_DOSETRONIC_ID]
+            if chosen_id != none_value:
+                self._dosetronic_id = chosen_id
+            return await self._async_create(self._chosen_alkatronic)
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_DOSETRONIC_ID, default=none_value
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[{"value": none_value, "label": "None"}]
+                        + [
+                            {"value": key, "label": label}
+                            for key, label in options.items()
+                        ]
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="select_dosetronic", data_schema=schema)
 
     async def _async_create(
         self, device: dict[str, Any]

@@ -10,7 +10,7 @@ from .api import AlkatronicClient
 from .const import CONF_DEVICE_ID, DOMAIN
 from .coordinator import AlkatronicCoordinator, AlkatronicDeviceStatusCoordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

@@ -13,6 +13,13 @@
         "data": {
           "device_id": "Device"
         }
+      },
+      "select_dosetronic": {
+        "title": "Link a Dosetronic device?",
+        "description": "Optionally link one Dosetronic to this Alkatronic to also expose its pump sensors.",
+        "data": {
+          "dosetronic_id": "Dosetronic device"
+        }
       }
     },
     "error": {

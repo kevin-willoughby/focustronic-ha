@@ -6,7 +6,13 @@ from typing import Any
 
 import aiohttp
 
-from .const import DEFAULT_HISTORY_DAYS, DEVICES_ENDPOINT, LOGIN_ENDPOINT, RECORDS_ENDPOINT
+from .const import (
+    DEFAULT_HISTORY_DAYS,
+    DEVICES_ENDPOINT,
+    LOGIN_ENDPOINT,
+    RECORDS_ENDPOINT,
+    SCHEDULE_TEST_ENDPOINT,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,6 +128,35 @@ class AlkatronicClient:
 
         # API returns oldest-first; we want newest-first for easy [0] access.
         return list(reversed(records))
+
+    async def async_schedule_test(self) -> None:
+        """Trigger an extra (on-demand) measurement on the device."""
+        if self._token is None:
+            await self.async_login()
+
+        scheduled = await self._schedule_test()
+        if not scheduled:
+            await self.async_login()
+            scheduled = await self._schedule_test()
+            if not scheduled:
+                raise AlkatronicApiError("Failed to schedule test after re-auth")
+
+    async def _schedule_test(self) -> bool | None:
+        url = SCHEDULE_TEST_ENDPOINT.format(device_id=self._device_id)
+        async with self._session.post(
+            url, data={"token": self._token}
+        ) as resp:
+            if resp.status in (401, 403):
+                return None
+            if resp.status != 200:
+                raise AlkatronicApiError(f"Schedule test failed: HTTP {resp.status}")
+
+            body = await resp.json()
+            if not body.get("result"):
+                raise AlkatronicApiError(
+                    f"API returned failure: {body.get('message')}"
+                )
+            return True
 
     async def _fetch_records(self, days: int) -> list[dict[str, Any]] | None:
         url = RECORDS_ENDPOINT.format(device_id=self._device_id)

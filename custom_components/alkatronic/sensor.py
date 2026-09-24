@@ -24,6 +24,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -180,6 +181,14 @@ class AlkatronicStatusSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], Any] | None = None
 
 
+def _timestamp_field(key: str) -> Callable[[dict[str, Any]], Any]:
+    def _get(dev: dict[str, Any]) -> Any:
+        value = dev.get(key)
+        return datetime.fromtimestamp(value, tz=timezone.utc) if value else None
+
+    return _get
+
+
 STATUS_SENSOR_DESCRIPTIONS: tuple[AlkatronicStatusSensorDescription, ...] = (
     AlkatronicStatusSensorDescription(
         key="upper_kh",
@@ -197,11 +206,88 @@ STATUS_SENSOR_DESCRIPTIONS: tuple[AlkatronicStatusSensorDescription, ...] = (
         key="last_online",
         name="Last Online",
         device_class=SensorDeviceClass.TIMESTAMP,
-        value_fn=lambda dev: (
-            datetime.fromtimestamp(dev["last_online"], tz=timezone.utc)
-            if dev.get("last_online")
-            else None
-        ),
+        value_fn=_timestamp_field("last_online"),
+    ),
+    AlkatronicStatusSensorDescription(
+        key="firmware_version",
+        name="Firmware Version",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: dev.get("firmware_version"),
+    ),
+    AlkatronicStatusSensorDescription(
+        key="local_ip_address",
+        name="IP Address",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: dev.get("local_ip_address"),
+    ),
+    AlkatronicStatusSensorDescription(
+        key="lifetime_test_count",
+        name="Lifetime Test Count",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: dev.get("lifetime_test_count"),
+    ),
+    AlkatronicStatusSensorDescription(
+        key="current_test_count",
+        name="Current Test Count",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: dev["settings"].get("current_test_count"),
+    ),
+    AlkatronicStatusSensorDescription(
+        key="test_count_limit",
+        name="Test Count Limit",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: dev["settings"].get("test_count_limit"),
+    ),
+    AlkatronicStatusSensorDescription(
+        key="measure_interval",
+        name="Measure Interval",
+        native_unit_of_measurement="h",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: dev["settings"].get("measure_interval"),
+    ),
+    AlkatronicStatusSensorDescription(
+        key="aquarium_volume",
+        name="Aquarium Volume",
+        native_unit_of_measurement="L",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: dev["settings"].get("aquarium_volume"),
+    ),
+    AlkatronicStatusSensorDescription(
+        key="last_error_code",
+        name="Last Error Code",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: dev.get("last_error_code") or None,
+    ),
+    AlkatronicStatusSensorDescription(
+        key="last_error_time",
+        name="Last Error Time",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=_timestamp_field("last_error_time"),
+    ),
+)
+
+
+DOSETRONIC_STATUS_SENSOR_DESCRIPTIONS: tuple[AlkatronicStatusSensorDescription, ...] = (
+    AlkatronicStatusSensorDescription(
+        key="last_online",
+        name="Last Online",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=_timestamp_field("last_online"),
+    ),
+    AlkatronicStatusSensorDescription(
+        key="firmware_version",
+        name="Firmware Version",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: dev.get("firmware_version"),
+    ),
+    AlkatronicStatusSensorDescription(
+        key="local_ip_address",
+        name="IP Address",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: dev.get("local_ip_address"),
     ),
 )
 
@@ -209,7 +295,7 @@ STATUS_SENSOR_DESCRIPTIONS: tuple[AlkatronicStatusSensorDescription, ...] = (
 class AlkatronicStatusSensor(
     CoordinatorEntity[AlkatronicDeviceStatusCoordinator], SensorEntity
 ):
-    """One value from the account-wide device-status endpoint, for the Alkatronic unit."""
+    """One value from the account-wide device-status endpoint, for one device."""
 
     entity_description: AlkatronicStatusSensorDescription
     _attr_has_entity_name = True
@@ -220,20 +306,23 @@ class AlkatronicStatusSensor(
         description: AlkatronicStatusSensorDescription,
         device_id: str,
         device_name: str,
+        device_type: str = "alkatronic",
+        model: str = "Alkatronic",
     ) -> None:
         super().__init__(coordinator)
         self.entity_description = description
         self._device_id = device_id
+        self._device_type = device_type
         self._attr_unique_id = f"{device_id}_{description.key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, device_id)},
             name=device_name,
             manufacturer="Focustronic",
-            model="Alkatronic",
+            model=model,
         )
 
     def _find_device(self) -> dict[str, Any] | None:
-        devices = (self.coordinator.data or {}).get("alkatronic", [])
+        devices = (self.coordinator.data or {}).get(self._device_type, [])
         return next((d for d in devices if str(d["id"]) == self._device_id), None)
 
     @property
@@ -264,6 +353,7 @@ class AlkatronicPumpSensor(
         dosetronic_id: str,
         pump_id: int,
         pump_name: str,
+        device_name: str = "Dosetronic",
     ) -> None:
         super().__init__(coordinator)
         self._dosetronic_id = dosetronic_id
@@ -272,7 +362,7 @@ class AlkatronicPumpSensor(
         self._attr_unique_id = f"{dosetronic_id}_pump_{pump_id}_remaining"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, dosetronic_id)},
-            name="Dosetronic",
+            name=device_name,
             manufacturer="Focustronic",
             model="Dosetronic",
         )
@@ -298,6 +388,103 @@ class AlkatronicPumpSensor(
         # negative if the pump's counter hasn't been reset after a refill —
         # clamp at 0 rather than showing a confusing negative number.
         return max(round(pump["remaining_volume"] / 1000, 1), 0)
+
+
+class AlkatronicPumpMaxVolumeSensor(
+    CoordinatorEntity[AlkatronicDeviceStatusCoordinator], SensorEntity
+):
+    """Configured max volume for one Dosetronic pump."""
+
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = "mL"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: AlkatronicDeviceStatusCoordinator,
+        dosetronic_id: str,
+        pump_id: int,
+        pump_name: str,
+        device_name: str = "Dosetronic",
+    ) -> None:
+        super().__init__(coordinator)
+        self._dosetronic_id = dosetronic_id
+        self._pump_id = pump_id
+        self._attr_name = f"Pump {pump_id} ({pump_name}) Max Volume"
+        self._attr_unique_id = f"{dosetronic_id}_pump_{pump_id}_max_volume"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, dosetronic_id)},
+            name=device_name,
+            manufacturer="Focustronic",
+            model="Dosetronic",
+        )
+
+    def _find_pump(self) -> dict[str, Any] | None:
+        devices = (self.coordinator.data or {}).get("dosetronic", [])
+        device = next(
+            (d for d in devices if str(d["id"]) == self._dosetronic_id), None
+        )
+        if device is None:
+            return None
+        return next(
+            (p for p in device["settings"]["pumps"] if p["id"] == self._pump_id),
+            None,
+        )
+
+    @property
+    def native_value(self) -> Any:
+        pump = self._find_pump()
+        return round(pump["max_volume"] / 1000, 1) if pump else None
+
+
+class AlkatronicPumpRemainingPercentSensor(
+    CoordinatorEntity[AlkatronicDeviceStatusCoordinator], SensorEntity
+):
+    """Remaining volume for one Dosetronic pump, as a percentage of its max."""
+
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = "%"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: AlkatronicDeviceStatusCoordinator,
+        dosetronic_id: str,
+        pump_id: int,
+        pump_name: str,
+        device_name: str = "Dosetronic",
+    ) -> None:
+        super().__init__(coordinator)
+        self._dosetronic_id = dosetronic_id
+        self._pump_id = pump_id
+        self._attr_name = f"Pump {pump_id} ({pump_name}) Remaining Percent"
+        self._attr_unique_id = f"{dosetronic_id}_pump_{pump_id}_remaining_percent"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, dosetronic_id)},
+            name=device_name,
+            manufacturer="Focustronic",
+            model="Dosetronic",
+        )
+
+    def _find_pump(self) -> dict[str, Any] | None:
+        devices = (self.coordinator.data or {}).get("dosetronic", [])
+        device = next(
+            (d for d in devices if str(d["id"]) == self._dosetronic_id), None
+        )
+        if device is None:
+            return None
+        return next(
+            (p for p in device["settings"]["pumps"] if p["id"] == self._pump_id),
+            None,
+        )
+
+    @property
+    def native_value(self) -> Any:
+        pump = self._find_pump()
+        if pump is None or not pump.get("max_volume"):
+            return None
+        percent = 100 * pump["remaining_volume"] / pump["max_volume"]
+        return max(round(percent, 1), 0)
 
 
 # ---------------------------------------------------------------------------
@@ -332,10 +519,47 @@ async def async_setup_entry(
             (d for d in status_devices if str(d["id"]) == dosetronic_id), None
         )
         if dosetronic_device:
+            dosetronic_name = (
+                dosetronic_device.get("friendly_name")
+                or dosetronic_device["serial_number"]
+            )
+            entities += [
+                AlkatronicStatusSensor(
+                    status_coordinator,
+                    description,
+                    dosetronic_id,
+                    dosetronic_name,
+                    device_type="dosetronic",
+                    model="Dosetronic",
+                )
+                for description in DOSETRONIC_STATUS_SENSOR_DESCRIPTIONS
+            ]
             for pump in dosetronic_device["settings"]["pumps"]:
                 entities.append(
                     AlkatronicPumpSensor(
-                        status_coordinator, dosetronic_id, pump["id"], pump["name"]
+                        status_coordinator,
+                        dosetronic_id,
+                        pump["id"],
+                        pump["name"],
+                        dosetronic_name,
+                    )
+                )
+                entities.append(
+                    AlkatronicPumpMaxVolumeSensor(
+                        status_coordinator,
+                        dosetronic_id,
+                        pump["id"],
+                        pump["name"],
+                        dosetronic_name,
+                    )
+                )
+                entities.append(
+                    AlkatronicPumpRemainingPercentSensor(
+                        status_coordinator,
+                        dosetronic_id,
+                        pump["id"],
+                        pump["name"],
+                        dosetronic_name,
                     )
                 )
 

@@ -10,6 +10,7 @@ BASE_URL = "https://alkatronic.focustronic.com"
 LOGIN_ENDPOINT = f"{BASE_URL}/users/login"
 DEVICES_ENDPOINT = f"{BASE_URL}/api/v2/users/self/devices"
 RECORDS_ENDPOINT = f"{BASE_URL}/api/v2/devices/alkatronic/{{device_id}}/data/test-records"
+SCHEDULE_TEST_ENDPOINT = f"{BASE_URL}/users/devices/{{device_id}}/scheduletest"
 
 DEVICE_STATUS_UPDATE_INTERVAL_MINUTES = 15
 
