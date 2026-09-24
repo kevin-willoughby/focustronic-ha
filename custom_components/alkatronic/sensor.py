@@ -358,7 +358,7 @@ class AlkatronicPumpSensor(
         super().__init__(coordinator)
         self._dosetronic_id = dosetronic_id
         self._pump_id = pump_id
-        self._attr_name = f"Pump {pump_id} ({pump_name}) Remaining"
+        self._attr_name = f"{pump_name} Remaining"
         self._attr_unique_id = f"{dosetronic_id}_pump_{pump_id}_remaining"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, dosetronic_id)},
@@ -393,7 +393,12 @@ class AlkatronicPumpSensor(
 class AlkatronicPumpMaxVolumeSensor(
     CoordinatorEntity[AlkatronicDeviceStatusCoordinator], SensorEntity
 ):
-    """Configured max volume for one Dosetronic pump."""
+    """Volume the pump's reservoir was set to at its last refill/reset.
+
+    The API calls this field "max_volume", but it isn't a fixed hardware
+    limit — it's whatever volume was entered when the bottle was last
+    refilled, and it's the denominator used to compute remaining-percent.
+    """
 
     _attr_has_entity_name = True
     _attr_native_unit_of_measurement = "mL"
@@ -410,7 +415,7 @@ class AlkatronicPumpMaxVolumeSensor(
         super().__init__(coordinator)
         self._dosetronic_id = dosetronic_id
         self._pump_id = pump_id
-        self._attr_name = f"Pump {pump_id} ({pump_name}) Max Volume"
+        self._attr_name = f"{pump_name} Refill Volume"
         self._attr_unique_id = f"{dosetronic_id}_pump_{pump_id}_max_volume"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, dosetronic_id)},
@@ -436,6 +441,15 @@ class AlkatronicPumpMaxVolumeSensor(
         pump = self._find_pump()
         return round(pump["max_volume"] / 1000, 1) if pump else None
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "note": (
+                "Volume set when the pump reservoir was last refilled/reset, "
+                "not a fixed hardware capacity."
+            )
+        }
+
 
 class AlkatronicPumpRemainingPercentSensor(
     CoordinatorEntity[AlkatronicDeviceStatusCoordinator], SensorEntity
@@ -457,7 +471,7 @@ class AlkatronicPumpRemainingPercentSensor(
         super().__init__(coordinator)
         self._dosetronic_id = dosetronic_id
         self._pump_id = pump_id
-        self._attr_name = f"Pump {pump_id} ({pump_name}) Remaining Percent"
+        self._attr_name = f"{pump_name} Remaining %"
         self._attr_unique_id = f"{dosetronic_id}_pump_{pump_id}_remaining_percent"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, dosetronic_id)},
